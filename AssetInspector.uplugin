@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "AssetInspector",
+	"Description": "Editor for reflection system data for assets, packages",
+	"Category": "Other",
+	"CreatedBy": "simona, n34prus",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "AssetInspector",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
