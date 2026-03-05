@@ -1,4 +1,6 @@
 ﻿#include "InspectorPackageBlock.h"
+
+#include "Components/SlateWrapperTypes.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SSearchBox.h"
 
@@ -50,7 +52,7 @@ TSharedRef<SWidget> SInspectorPackageRow::GenerateWidgetForColumn(const FName& C
             uint32 Flags = Item->Package->GetPackageFlags();
 
             FString Out;
-            if (Flags & RF_Transient)          Out += "TR ";
+            //if (Flags & RF_Transient)          Out += "TR "; object flag, not package
             if (Flags & PKG_PlayInEditor)      Out += "PIE ";
             if (Flags & PKG_CompiledIn)         Out += "CI ";
             if (Flags & PKG_EditorOnly)         Out += "EO ";
@@ -78,8 +80,13 @@ void SInspectorPackageBlock::Construct(const FArguments& InArgs)
         + SVerticalBox::Slot()
         .AutoHeight()
         [
-            SAssignNew(SearchBox, SSearchBox)
-            .OnTextChanged(this, &SInspectorPackageBlock::OnSearchChanged)
+            SNew(SBox)
+            .HeightOverride(50.f)
+            .VAlign(VAlign_Center)
+            [
+                SAssignNew(SearchBox, SSearchBox)
+                .OnTextChanged(this, &SInspectorPackageBlock::OnSearchChanged)
+            ]
         ]
 
         + SVerticalBox::Slot()
