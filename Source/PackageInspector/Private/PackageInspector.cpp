@@ -9,6 +9,8 @@
 
 #define LOCTEXT_NAMESPACE "FPackageInspectorModule"
 
+DEFINE_LOG_CATEGORY(LogPackageInspector);
+
 static const FName PackageInspectorTabName("PackageInspector");
 
 void FPackageInspectorModule::StartupModule()

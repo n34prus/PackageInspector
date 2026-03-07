@@ -89,8 +89,27 @@ void SInspectorPackageBlock::Construct(const FArguments& InArgs)
             .HeightOverride(50.f)
             .VAlign(VAlign_Center)
             [
-                SAssignNew(SearchBox, SSearchBox)
-                .OnTextChanged(this, &SInspectorPackageBlock::OnSearchChanged)
+                SNew(SHorizontalBox)
+
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .VAlign(VAlign_Center)
+                .HAlign(HAlign_Left)
+                .Padding(5.f,0.f)
+                [
+                    SNew(SButton)
+                    .Text(FText::FromString("Refresh"))
+                    .OnClicked(this, &SInspectorPackageBlock::OnRefreshPressed)
+                ]
+
+                + SHorizontalBox::Slot()
+                .FillWidth(1.f)
+                .VAlign(VAlign_Center)
+                .Padding(5.f,0.f)
+                [
+                    SAssignNew(SearchBox, SSearchBox)
+                    .OnTextChanged(this, &SInspectorPackageBlock::OnSearchChanged)
+                ]
             ]
         ]
 
@@ -197,6 +216,11 @@ void SInspectorPackageBlock::UpdatePackages()
 
     // store for future filtering
     AllRootNodes = RootNodes;
+}
+
+void SInspectorPackageBlock::UpdateLayout()
+{
+    // todo: comparsion algorythm to add/remove nodes by name/path
 }
 
 void SInspectorPackageBlock::OnSelectionChanged(FInspectPackagePtr Item, ESelectInfo::Type SelectInfo)
@@ -342,6 +366,12 @@ bool SInspectorPackageBlock::FilterNode(
     // green gighlight
     OutNode->bHighlighted = bNameMatch;
     return true;
+}
+
+FReply SInspectorPackageBlock::OnRefreshPressed()
+{
+    UpdatePackages();
+    return FReply::Handled();
 }
 
 void SInspectorPackageBlock::ApplyFilter()

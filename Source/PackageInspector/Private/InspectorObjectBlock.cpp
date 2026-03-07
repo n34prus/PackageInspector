@@ -64,9 +64,27 @@ void SInspectorObjectBlock::Construct(const FArguments& InArgs)
 		[
 			SNew(SBox)
 			.HeightOverride(50.f)
-			.VAlign(VAlign_Center)
 			[
-				SAssignNew(HeadHintText, STextBlock)
+				SNew(SHorizontalBox)
+
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.VAlign(VAlign_Center)
+				.HAlign(HAlign_Left)
+				.Padding(5.f,0.f)
+				[
+					SAssignNew(HeadHintTextLeft, STextBlock)
+				]
+				
+				+ SHorizontalBox::Slot()
+				.FillWidth(1.f)
+				.VAlign(VAlign_Center)
+				.HAlign(HAlign_Right)
+				.Padding(5.f,0.f)
+				[
+					SAssignNew(HeadHintTextRight, STextBlock)
+					.Justification(ETextJustify::Right)
+				]
 			]
 		]
 
@@ -79,6 +97,7 @@ void SInspectorObjectBlock::Construct(const FArguments& InArgs)
 			.OnGetChildren(this, &SInspectorObjectBlock::OnGetChildren)
 			.OnSelectionChanged(this, &SInspectorObjectBlock::OnSelectionChanged)
 			.OnContextMenuOpening(this, &SInspectorObjectBlock::OnContextMenuOpening)
+			.OnExpansionChanged(this, &SInspectorObjectBlock::OnItemExpansionChanged)
 			.HeaderRow
 			(
 				SNew(SHeaderRow)
@@ -89,7 +108,7 @@ void SInspectorObjectBlock::Construct(const FArguments& InArgs)
 		]
 	];
 
-	UpdateHint();
+	UpdateLayout();
 }
 
 SInspectorObjectBlock::~SInspectorObjectBlock()
@@ -108,33 +127,103 @@ void SInspectorObjectBlock::AddRootObjects(const TArray<UObject*>& RootObjects, 
 		if (RootItems.Contains(Obj)) continue;
 		FInspectObjectPtr RootNode (Obj);
 		RootItems.Add(RootNode);
-		ExtractPackageObjects(Obj, RootNode, 1);
+		ExtractPackageObjects(RootNode, 1);
 	}
-	TreeView->RequestTreeRefresh();
-	UpdateHint();
+	UpdateLayout();
 }
 
 void SInspectorObjectBlock::RemoveRootObjects(const TArray<UObject*>& RootObject)
 {
 	for (UObject* Obj : RootObject)
 		if (RootItems.Contains(Obj)) RootItems.Remove(Obj);
-	TreeView->RequestTreeRefresh();
-	UpdateHint();
+	UpdateLayout();
 }
 
-void SInspectorObjectBlock::ExtractPackageObjects(UObject* RootObject, FInspectObjectPtr RootNode, uint8_t depth)
+PRAGMA_DISABLE_OPTIMIZATION
+void SInspectorObjectBlock::UpdateLayout()
 {
-	if (!RootObject) return;
+	bool bSkipDuplicateCheck = true;	// set false to debug
+	
+	TSet<FInspectObjectPtr> Expanded;
+	TreeView->GetExpandedItems(Expanded);
+	for (FInspectObjectPtr Node : Expanded)
+	{
+		if (!Node.IsValid())
+			continue;
+		auto Obj = Node.Get();
+		ExtractPackageObjects(Node, 1);
+	}
+
+	auto GetDuplicates = [&]() -> TSet<FInspectObjectPtr>
+	{
+		TSet<FInspectObjectPtr> Unique;
+		TSet<FInspectObjectPtr> Duplicates;
+		for (auto& ChildSet : ChildrenMap)
+		{
+			for (auto& Child : ChildSet.Value)
+			{
+				if (!Unique.Contains(Child))
+					Unique.Add(Child);
+				else
+				{
+					Duplicates.Add(Child);
+				}
+			}
+		}
+		return Duplicates;
+	};
+	
+	if (!bSkipDuplicateCheck)
+	{
+		TSet<FInspectObjectPtr> Dup = GetDuplicates();
+		if (!Dup.IsEmpty())
+		{
+			for (auto& Obj : Dup)
+			{
+				UE_LOG(LogPackageInspector, Warning, TEXT("Duplicate object %s"), *Obj->GetName());
+			}
+			return;
+		}
+	}
+	
+	if (TreeView.IsValid())
+	{
+		TreeView->RequestTreeRefresh();
+	}
+
+	UpdateHint();
+}
+PRAGMA_ENABLE_OPTIMIZATION
+
+void SInspectorObjectBlock::ExtractPackageObjects(FInspectObjectPtr RootNode, uint8_t depth)
+{
+	if (!RootNode.IsValid() || !RootNode.Get()->IsValidLowLevel())
+	{
+		RootItems.Remove(RootNode);
+		ChildrenMap.Remove(RootNode);
+		return;
+	}
+	
+	UObject* RootObject = RootNode.Get();
 	TArray<UObject*> Objects;
 	GetObjectsWithOuter(RootObject, Objects, false);
 
 	for (UObject* Obj : Objects)
 	{
 		FInspectObjectPtr Node (Obj);
-		
 		ChildrenMap.FindOrAdd(RootNode).Add(Node);
+		if (depth) ExtractPackageObjects(Node, depth - 1);
+	}
 
-		if (depth) ExtractPackageObjects(Obj, Node, depth - 1);
+	if (TSet<FInspectObjectPtr>* Childs = ChildrenMap.Find(RootNode))
+	{
+		for (auto It = Childs->CreateIterator(); It; ++It)
+		{
+			if (!It->IsValid() || It->Get()->GetOuter() != RootObject)
+			{
+				It.RemoveCurrent();
+			}
+		}
 	}
 }
 
@@ -151,8 +240,6 @@ void SInspectorObjectBlock::OnGetChildren(
 {
 	if (ChildrenMap.Contains(Item))
 	{
-		UObject* Obj = Item.Get();
-		ExtractPackageObjects(Obj, Item, 1);
 		OutChildren = ChildrenMap[Item].Array();
 	}
 }
@@ -206,6 +293,14 @@ void SInspectorObjectBlock::CopySelectionToClipboard()
 	}
 
 	FPlatformApplicationMisc::ClipboardCopy(*Result);
+}
+
+auto SInspectorObjectBlock::OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded) -> void
+{
+	if (bExpanded)
+	{
+		UpdateLayout();
+	}
 }
 
 void SInspectorObjectBlock::UpdateHint()
@@ -298,16 +393,18 @@ void SInspectorObjectBlock::UpdateHint()
 			FText NameHint = FText::FromString(Object->GetName());
 			FText FlagHint = FText::FromString(Out);
 			FText HintText = FText::Format(
-				FText::FromString("Package: {0}\nObject: {1}\nFlags: {2}"),
+				FText::FromString("{0}\n{1}\n{2}"),
 				MoveTemp(PathHint),
 				MoveTemp(NameHint),
 				MoveTemp(FlagHint)
 			);
-			HeadHintText->SetText(MoveTemp(HintText));
+			HeadHintTextLeft->SetText(FText::FromString("Package:\nObject:\nFlags:"));
+			HeadHintTextRight->SetText(MoveTemp(HintText));
 		}
 	}
 	else
 	{
-		HeadHintText->SetText(FText::FromString("Select asset from content browser or package from package browser"));
+		HeadHintTextLeft->SetText(FText::FromString("Select asset from content browser or package from package browser"));
+		HeadHintTextRight->SetText(FText());
 	}
 }

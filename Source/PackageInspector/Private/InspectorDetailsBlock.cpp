@@ -7,53 +7,57 @@ void SDirtyIndicator::Construct(const FArguments& InArgs)
 	ChildSlot
 	[
 		SNew(SHorizontalBox)
-
+		
 		+ SHorizontalBox::Slot()
 		.AutoWidth()
 		.VAlign(VAlign_Center)
 		.HAlign(HAlign_Center)
-		[
-			SAssignNew(DirtyIcon, SImage)
-		]
-
-		+ SHorizontalBox::Slot()
-		.AutoWidth()
-		.VAlign(VAlign_Center)
-		.HAlign(HAlign_Center)
-		.Padding(4)
+		.Padding(5)
 		[
 			SAssignNew(DirtyButton, SButton)
 			.Text(FText::FromString("MarkPackageDirty"))
 			.OnClicked(this, &SDirtyIndicator::OnMarkAsDirtyPressed)
 		]
+
+		+ SHorizontalBox::Slot()
+		.FillWidth(1.f)
+
+		+ SHorizontalBox::Slot()
+		.AutoWidth()
+		.VAlign(VAlign_Center)
+		.HAlign(HAlign_Center)
+		.Padding(5)
+		[
+			SAssignNew(DirtyText, STextBlock)
+			.Text(FText::FromString(" - "))
+		]
+
+		+ SHorizontalBox::Slot()
+		.AutoWidth()
+		.VAlign(VAlign_Center)
+		.HAlign(HAlign_Center)
+		.Padding(5)
+		[
+			SAssignNew(DirtyIcon, SImage)
+		]
+		
 	];
-	UpdateVisuals();
+	UpdateLayout();
 }
 
 void SDirtyIndicator::BindObject(UObject* Object)
 {
 	this->ObjectPtr = Object;
-	UpdateVisuals();
-	if (ObjectPtr.IsValid())
-	{
-		TimerHandlePtr = RegisterActiveTimer(1.0f, FWidgetActiveTimerDelegate::CreateSP(this, &SDirtyIndicator::OnTick));
-	}
-	else
-	{
-		if (TimerHandlePtr.IsValid())
-		{
-			UnRegisterActiveTimer(TimerHandlePtr.ToSharedRef());
-		}
-	}
+	UpdateLayout();
 }
 
 EActiveTimerReturnType SDirtyIndicator::OnTick(double InCurrentTime, float InDeltaTime)
 {
-	UpdateVisuals();
+	UpdateLayout();
 	return EActiveTimerReturnType::Continue;
 }
 
-void SDirtyIndicator::UpdateVisuals()
+void SDirtyIndicator::UpdateLayout()
 {
 	const bool bIsDirty = IsOutermostDirty();
 
@@ -61,18 +65,24 @@ void SDirtyIndicator::UpdateVisuals()
 	{
 		if (ObjectPtr.IsValid())
 		{
-			DirtyIcon->SetEnabled(true);
+			DirtyIcon->SetVisibility(EVisibility::Visible);
 			DirtyButton->SetEnabled(!bIsDirty);
 			DirtyIcon->SetImage(
 				bIsDirty
-					? FAppStyle::GetBrush("Icons.Save")
-					: FAppStyle::GetBrush("Icons.Check")
-			);
+				? FAppStyle::GetBrush("Icons.Save")
+				: FAppStyle::GetBrush("Icons.Check")
+				);
+			DirtyText->SetText(
+				bIsDirty
+				? FText::FromString("DIRTY")
+				: FText::FromString("CLEAN")
+				);
 		}
 		else
 		{
-			DirtyIcon->SetEnabled(false);
+			DirtyIcon->SetVisibility(EVisibility::Hidden);
 			DirtyButton->SetEnabled(false);
+			DirtyText->SetText(FText::FromString("NONE"));
 		}
 	}
 }
@@ -80,7 +90,7 @@ void SDirtyIndicator::UpdateVisuals()
 FReply SDirtyIndicator::OnMarkAsDirtyPressed()
 {
 	MarkOutermostAsDirty();
-	UpdateVisuals();
+	UpdateLayout();
 	return FReply::Handled();
 }
 
@@ -154,6 +164,11 @@ void SInspectorDetailsBlock::Construct(const FArguments& InArgs)
 			]
 		]
 	];
+}
+
+void SInspectorDetailsBlock::UpdateLayout()
+{
+	if (DirtyIndicator) DirtyIndicator->UpdateLayout();
 }
 
 void SInspectorDetailsBlock::SetObject(UObject* Object)

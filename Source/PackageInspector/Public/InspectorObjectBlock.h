@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Views/STreeView.h"
-#include "InspectorCore.h"
+#include "PackageInspector.h"
 
 struct FAssetData;
 
@@ -47,22 +47,27 @@ public:
 	void RemoveRootObjects(const TArray<UObject*>& RootObject);
 	inline void RemoveRootObject(UObject* RootObject) { RemoveRootObjects({RootObject}); }
 
+	void UpdateLayout();
+
 private:
 	
 	TSharedPtr<STreeView<FInspectObjectPtr>> TreeView;
-	TSharedPtr<STextBlock> HeadHintText;
+	TSharedPtr<STextBlock> HeadHintTextLeft;
+	TSharedPtr<STextBlock> HeadHintTextRight;
 
 	TArray<FInspectObjectPtr> RootItems;
 
 	TMap<FInspectObjectPtr, TSet<FInspectObjectPtr>> ChildrenMap;
 	
-	void ExtractPackageObjects(UObject* RootObject, FInspectObjectPtr RootNode, uint8_t depth = 0);
+	void ExtractPackageObjects(FInspectObjectPtr RootNode, uint8_t depth = 0);
 	
 	TSharedRef<ITableRow> OnGenerateRow(FInspectObjectPtr Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void OnGetChildren(FInspectObjectPtr Item, TArray<FInspectObjectPtr>& OutChildren);
 	void OnSelectionChanged(FInspectObjectPtr Item, ESelectInfo::Type SelectInfo);
 	TSharedPtr<SWidget> OnContextMenuOpening();
 	void CopySelectionToClipboard();
+	auto OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded) -> void
+	;
 	void UpdateHint();
 };
 

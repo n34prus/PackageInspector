@@ -12,19 +12,19 @@ public:
 
 	void Construct(const FArguments& InArgs);
 	void BindObject(UObject* Object);
+	void UpdateLayout();
 
 private:
 	
 	EActiveTimerReturnType OnTick(double InCurrentTime, float InDeltaTime);
-	void UpdateVisuals();
 	FReply OnMarkAsDirtyPressed();
 	bool IsOutermostDirty() const;
 	void MarkOutermostAsDirty();
 	
 	TSharedPtr<SImage> DirtyIcon;
 	TSharedPtr<SButton> DirtyButton;
+	TSharedPtr<STextBlock> DirtyText; 
 	TWeakObjectPtr<UObject> ObjectPtr;
-	TSharedPtr<FActiveTimerHandle> TimerHandlePtr;
 };
 
 class SInspectorDetailsBlock : public SCompoundWidget
@@ -34,6 +34,8 @@ public:
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
+
+	void UpdateLayout();
 
 	void SetObject(UObject* Object);
 	void SetEditingEnabled(bool bEnabled);

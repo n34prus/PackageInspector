@@ -22,13 +22,20 @@ private:
 	
 	TSharedPtr<SInspectorSettingsBlock> SettingsBlock;
 	TSharedPtr<SInspectorPackageBlock>  PackageBlock;
-	TSharedPtr<SInspectorObjectBlock>      TreeBlock;
+	TSharedPtr<SInspectorObjectBlock>    ObjectBlock;
 	TSharedPtr<SInspectorDetailsBlock>  DetailsBlock;
 	
 	FDelegateHandle ContentBrowserHandle;
 
+	float UpdateFrequency = 1.0f;	// seconds
+	TSharedPtr<FActiveTimerHandle> TimerHandlePtr;
+	EActiveTimerReturnType OnTick(double InCurrentTime, float InDeltaTime);
+	void UpdateLayout();
+	
 	void BindToContentBrowser();
 	void UnbindFromContentBrowser();
 	void OnAssetSelectionChanged(const TArray<FAssetData>& SelectedAssets, bool bIsPrimary);
 	void RebuildLayout();
+
+	
 };

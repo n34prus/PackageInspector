@@ -10,12 +10,17 @@
 SInspectorGeneralWindow::~SInspectorGeneralWindow()
 {
 	UnbindFromContentBrowser();
+	if (TimerHandlePtr.IsValid())
+	{
+		UnRegisterActiveTimer(TimerHandlePtr.ToSharedRef());
+	}
 }
 
 void SInspectorGeneralWindow::Construct(const FArguments& InArgs)
 {
 	RebuildLayout();
 	BindToContentBrowser();
+	TimerHandlePtr = RegisterActiveTimer(UpdateFrequency, FWidgetActiveTimerDelegate::CreateSP(this, &SInspectorGeneralWindow::OnTick));
 }
 
 void SInspectorGeneralWindow::RebuildLayout()
@@ -39,7 +44,7 @@ void SInspectorGeneralWindow::RebuildLayout()
 		+ SSplitter::Slot()
 		.Value(0.4f)
 		[
-			SAssignNew(TreeBlock, SInspectorObjectBlock)
+			SAssignNew(ObjectBlock, SInspectorObjectBlock)
 		]
 
 		+ SSplitter::Slot()
@@ -56,7 +61,7 @@ void SInspectorGeneralWindow::RebuildLayout()
 			DetailsBlock->SetEditingEnabled(bEdit);
 		});
 
-	TreeBlock->OnObjectSelected.BindLambda(
+	ObjectBlock->OnObjectSelected.BindLambda(
 [this](UObject* Obj)
 		{
 			if (DetailsBlock)
@@ -68,11 +73,24 @@ void SInspectorGeneralWindow::RebuildLayout()
 	PackageBlock->OnMultipleObjectsSelected.BindLambda(
 [this](const TArray<UObject*>& ObjArr)
 		{
-			if (TreeBlock)
+			if (ObjectBlock)
 			{
-				TreeBlock->SetRootObjects(ObjArr);
+				ObjectBlock->SetRootObjects(ObjArr);
 			}
 		});
+}
+
+EActiveTimerReturnType SInspectorGeneralWindow::OnTick(double InCurrentTime, float InDeltaTime)
+{
+	UpdateLayout();
+	return EActiveTimerReturnType::Continue;
+}
+
+void SInspectorGeneralWindow::UpdateLayout()
+{
+	// if (PackageBlock) PackageBlock->UpdateLayout(); better to stay on manua update
+	if (ObjectBlock) ObjectBlock->UpdateLayout();
+	if (DetailsBlock) DetailsBlock->UpdateLayout();
 }
 
 void SInspectorGeneralWindow::BindToContentBrowser()
@@ -98,7 +116,7 @@ void SInspectorGeneralWindow::OnAssetSelectionChanged(
 	const TArray<FAssetData>& SelectedAssets,
 	bool bIsPrimary)
 {
-	if (!SelectedAssets.Num() || !TreeBlock) return;
+	if (!SelectedAssets.Num() || !ObjectBlock) return;
 
 	TArray<UObject*> RootObjects;
 	
@@ -111,5 +129,5 @@ void SInspectorGeneralWindow::OnAssetSelectionChanged(
 		RootObjects.Add(Package);
 	}
 	
-	TreeBlock->SetRootObjects(RootObjects);
+	ObjectBlock->SetRootObjects(RootObjects);
 }

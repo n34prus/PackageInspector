@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
 #include "UObject/Package.h"
-#include "InspectorCore.h"
+#include "PackageInspector.h"
 
 struct FPackageTreeNode
 {
@@ -45,10 +45,11 @@ public:
 	SLATE_END_ARGS()
 
 	FOnMultipleObjectsSelected OnMultipleObjectsSelected;
-
 	
 	void Construct(const FArguments& InArgs);
 	void UpdatePackages();
+	void UpdateLayout();
+
 
 private:
 	
@@ -62,6 +63,8 @@ private:
 	void ApplyFilter();
 	bool FilterNode(const FInspectPackagePtr& Node,	FInspectPackagePtr& OutNode);
 
+	FReply OnRefreshPressed();
+	
 	TSharedPtr<STreeView<FInspectPackagePtr>> TreeView;
 	TArray<FInspectPackagePtr> RootNodes;
 	TArray<FInspectPackagePtr> AllRootNodes;
