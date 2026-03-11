@@ -64,11 +64,18 @@ private:
 	TSharedRef<ITableRow> OnGenerateRow(FInspectObjectPtr Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void OnGetChildren(FInspectObjectPtr Item, TArray<FInspectObjectPtr>& OutChildren);
 	void OnSelectionChanged(FInspectObjectPtr Item, ESelectInfo::Type SelectInfo);
-	TSharedPtr<SWidget> OnContextMenuOpening();
-	void CopySelectionToClipboard();
-	auto OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded) -> void
-	;
+	auto OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded) -> void;
 	void UpdateHint();
+
+	// context menu //
+	TSharedPtr<SWidget> OnContextMenuOpening();
+	void OnRenameCommitted(const FText& Text, ETextCommit::Type Arg, UObject* Object);
+	void RenameSelectedObject();
+	void OnRemoveFromPackage();
+	void CopySelectionToClipboard();
+	void CreateSubObject();
+	void OnNewSubObjectNameCommitted(const FText& Text, ETextCommit::Type Arg, UClass* Class);
+
 };
 
 
