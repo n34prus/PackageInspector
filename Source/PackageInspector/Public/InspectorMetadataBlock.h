@@ -13,9 +13,35 @@ struct FMetaRow
 };
 
 DECLARE_DELEGATE_OneParam(
-	FOnInspectorMetaDeleteRequested,
+	FOnInspectorMetaActionRequest,
 	TSharedPtr<FMetaRow>
 );
+
+class InspectorMetaDataHelper
+{
+public:
+	static TArray<FName> GetAvalibleMetaKeys();
+	static TArray<FString> GetAvalibleMetaValues(const FName& Key);
+	static void RefreshMetaDataCollection();
+	
+	static TMap<UObject*, FInspectorObjectMetaData> GetMetaData(const UPackage * Package);
+	static TArray<FInspectorObjectMetaData> GetMetaDataForUnreachableObjects(const UPackage * Package);
+	static void SetMetaData(const UObject * Object, const FName Key, const FString Value);
+	static void RemoveMetaData(const UObject * Object, const FName Key);
+private:
+	inline static TMap<FName, TSet<FString>> ExistedCollection {};
+	inline static TSet<FName> LastUsedKeys {};
+};
+
+struct FInspectorMetaSelector
+{
+	FInspectorMetaSelector();
+	void SetKeyAndGenerateValues(TSharedPtr<FName> NewValue);
+	TArray<TSharedPtr<FName>> SelectorKeys;
+	TSharedPtr<FName> SelectedKey;
+	TArray<TSharedPtr<FString>> SelectorValues;
+	TSharedPtr<FString> SelectedValue;
+};
 
 class SInspectorMetaRow : public SMultiColumnTableRow<TSharedPtr<FMetaRow>>
 {
@@ -25,10 +51,14 @@ public:
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs, const TSharedRef<STableViewBase>& OwnerTable);
-	FOnInspectorMetaDeleteRequested OnDeleteRequested;
+	FOnInspectorMetaActionRequest OnDeleteRequested;
+	FOnInspectorMetaActionRequest OnAddRequested;
 	virtual TSharedRef<SWidget> GenerateWidgetForColumn(const FName& ColumnName) override;
 private:
 	TSharedPtr<FMetaRow> Item;
+	TUniquePtr<FInspectorMetaSelector> MetaSelector;
+	TSharedPtr<SComboBox<TSharedPtr<FName>>> KeyComboBox;
+	TSharedPtr<SComboBox<TSharedPtr<FString>>> ValueComboBox;
 };
 
 class SInspectorMetadataBlock : public SCompoundWidget
@@ -52,10 +82,5 @@ private:
 	TSharedRef<ITableRow> OnGenerateRow(TSharedPtr<FMetaRow> Item, const TSharedRef<STableViewBase>& OwnerTable);
 
 	void OnDeleteMetaRow(TSharedPtr<FMetaRow> Row);
-	void OnAddMetaRow(FName Key, FString Value);
-
-	TMap<UObject*, FInspectorObjectMetaData> GetMetaData(const UPackage * Package);
-	TArray<FInspectorObjectMetaData> GetMetaDataForUnreachableObjects(const UPackage * Package);
-	void SetMetaData(const UObject * Object, const FName Key, const FString Value);
-	void RemoveMetaData(const UObject * Object, const FName Key);
+	void OnAddMetaRow(TSharedPtr<FMetaRow> Row);
 };

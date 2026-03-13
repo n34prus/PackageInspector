@@ -1,4 +1,137 @@
 ﻿#include "InspectorMetadataBlock.h"
+#include "Widgets/Input/SEditableComboBox.h"
+
+TArray<FName> InspectorMetaDataHelper::GetAvalibleMetaKeys()
+{
+	TArray<FName> Result;
+	if (ExistedCollection.IsEmpty())
+	{
+		RefreshMetaDataCollection();
+	}
+	ExistedCollection.GetKeys(Result);
+	
+	Result.Sort([](const FName& A, const FName& B)
+	{
+		const bool AIsLastUsed = LastUsedKeys.Contains(A);
+		const bool BIsLastUsed = LastUsedKeys.Contains(B);
+		if (AIsLastUsed && !BIsLastUsed)
+			return true;
+		if (!AIsLastUsed && BIsLastUsed)
+			return false;
+		return A.ToString() < B.ToString();
+	});
+	return Result;
+}
+
+TArray<FString> InspectorMetaDataHelper::GetAvalibleMetaValues(const FName& Key)
+{
+	TArray<FString> Result;
+	if (ExistedCollection.Contains(Key))
+	{
+		Result = ExistedCollection[Key].Array();
+		Result.Sort();
+	}
+	return Result;
+}
+
+void InspectorMetaDataHelper::RefreshMetaDataCollection()
+{
+	for (TObjectIterator<UPackage> It; It; ++It)
+	{
+		UPackage* Package = *It;
+		for (const auto& [Obj, MetaDataMap] : GetMetaData(Package))
+		{
+			for (const auto& [Key, Value] : MetaDataMap)
+			{
+				auto& Set = ExistedCollection.FindOrAdd(Key);
+				if (!Value.IsEmpty()) Set.Add(Value);
+			}
+		}
+	}
+}
+
+TMap<UObject*, FInspectorObjectMetaData> InspectorMetaDataHelper::GetMetaData(const UPackage* Package)
+{
+	TMap<UObject *, FInspectorObjectMetaData> Result;
+
+	bool bHasMetaData = Package->HasMetaData();
+
+
+	if (!Package || !bHasMetaData)
+		return Result;
+
+	auto ConstPackage = const_cast<UPackage*>(Package);
+	if (!ConstPackage)
+		return Result;
+
+	for (const auto & Entry : ConstPackage->GetMetaData()->ObjectMetaDataMap)
+	{
+		if (Entry.Key.IsValid( ))
+		{
+			Result.Add(Entry.Key.Get( ), FInspectorObjectMetaData{ Entry.Value });
+		}
+	}
+
+	return Result;
+}
+
+TArray<FInspectorObjectMetaData> InspectorMetaDataHelper::GetMetaDataForUnreachableObjects(const UPackage* Package)
+{
+	TArray<FInspectorObjectMetaData> Result;
+
+	if (!Package)
+		return Result;
+
+	auto ConstPackage = const_cast<UPackage*>(Package);
+	if (!ConstPackage)
+		return Result;
+
+	for (const auto & Entry : ConstPackage->GetMetaData()->ObjectMetaDataMap)
+	{
+		if (!Entry.Key.IsValid( ))
+		{
+			Result.Emplace(FInspectorObjectMetaData{ Entry.Value });
+		}
+	}
+
+	return Result;
+}
+
+void InspectorMetaDataHelper::SetMetaData(const UObject* Object, const FName Key, const FString Value)
+{
+	if (!Object || Key.IsNone( )) return;
+	LastUsedKeys.Add(Key);
+	Object->GetPackage( )->GetMetaData( )->SetValue(Object, Key, *Value);
+}
+
+void InspectorMetaDataHelper::RemoveMetaData(const UObject* Object, const FName Key)
+{
+	if (!Object || Key.IsNone( )) return;
+
+	Object->GetPackage( )->GetMetaData( )->RemoveValue(Object, Key);
+}
+
+FInspectorMetaSelector::FInspectorMetaSelector()
+{
+	InspectorMetaDataHelper::RefreshMetaDataCollection();
+	for (const auto& Key : InspectorMetaDataHelper::GetAvalibleMetaKeys())
+	{
+		SelectorKeys.Add(MakeShared<FName>(Key));
+	}	
+}
+
+void FInspectorMetaSelector::SetKeyAndGenerateValues(TSharedPtr<FName> NewValue)
+{
+	SelectedKey = NewValue;
+	SelectorValues.Empty();
+	if (SelectedKey.IsValid())
+	{
+		for (const auto& Value : InspectorMetaDataHelper::GetAvalibleMetaValues(*SelectedKey))
+		{
+			SelectorValues.Add(MakeShared<FString>(Value));
+		}
+	}
+}
 
 void SInspectorMetaRow::Construct(const FArguments& InArgs, const TSharedRef<STableViewBase>& OwnerTable)
 {
@@ -14,27 +147,99 @@ TSharedRef<SWidget> SInspectorMetaRow::GenerateWidgetForColumn(const FName& Colu
 	// add new meta
 	if (bIsEmpty)
 	{
-		if (ColumnName == "Key")
+		if (!MetaSelector.IsValid())
 		{
-			return SNew(SComboBox<TSharedPtr<FString>>)
-				.OptionsSource(&AvailableKeys)
-				.OnSelectionChanged_Lambda([this](TSharedPtr<FString> NewSelected, ESelectInfo::Type)
+			MetaSelector = MakeUnique<FInspectorMetaSelector>();
+		}
+		
+		if (ColumnName == "Key")
+		{			
+			KeyComboBox = SNew(SComboBox<TSharedPtr<FName>>)
+				.OptionsSource(& MetaSelector->SelectorKeys)
+				.OnGenerateWidget_Lambda([](TSharedPtr<FName> Item) -> TSharedRef<SWidget>
 				{
-					SelectedKey = NewSelected;
+					return SNew(STextBlock)
+						.Text(Item.IsValid() ? FText::FromName(*Item) : FText::GetEmpty());
+				})
+				.OnSelectionChanged_Lambda([this](TSharedPtr<FName> NewSelected, ESelectInfo::Type)
+				{
+					MetaSelector->SetKeyAndGenerateValues(NewSelected);
+					if (ValueComboBox.IsValid())
+					{
+						ValueComboBox->RefreshOptions();
+					}
 				})
 				[
-					SNew(STextBlock)
+					SNew(SEditableTextBox)
 					.Text_Lambda([this]() -> FText
 					{
-						return SelectedKey.IsValid() ? FText::FromString(*SelectedKey) : FText::GetEmpty();
+						return MetaSelector->SelectedKey.IsValid()
+							? FText::FromName(*MetaSelector->SelectedKey)
+							: FText::GetEmpty();
+					})
+					.OnTextCommitted_Lambda([this](const FText& NewText, ETextCommit::Type CommitType)
+					{
+						if (!NewText.IsEmpty())
+						{
+							TSharedPtr<FName> NewKey = MakeShared<FName>(FName(*NewText.ToString()));
+							if (!MetaSelector->SelectorKeys.Contains(NewKey))
+							{
+								MetaSelector->SelectorKeys.Add(NewKey);
+							}
+							MetaSelector->SetKeyAndGenerateValues(NewKey);
+							if (KeyComboBox.IsValid())
+							{
+								KeyComboBox->SetSelectedItem(NewKey);
+								KeyComboBox->RefreshOptions();
+							}
+							if (ValueComboBox.IsValid())
+							{
+								ValueComboBox->RefreshOptions();
+							}
+						}
 					})
 				];
+
+			return KeyComboBox.ToSharedRef();
 		}
 
 		if (ColumnName == "Value")
 		{
-			return SNew(STextBlock)
-				.Text(FText::FromString(Item->Value));
+			ValueComboBox = SNew(SComboBox<TSharedPtr<FString>>)
+			.OptionsSource(& MetaSelector->SelectorValues)
+			.OnGenerateWidget_Lambda([](TSharedPtr<FString> Item) -> TSharedRef<SWidget>
+			{
+				return SNew(STextBlock)
+					.Text(Item.IsValid() ? FText::FromString(*Item) : FText::GetEmpty());
+			})
+			.OnSelectionChanged_Lambda([this](TSharedPtr<FString> NewSelected, ESelectInfo::Type)
+			{
+				MetaSelector->SelectedValue = NewSelected;
+			})
+			[
+				SNew(SEditableTextBox)
+					.Text_Lambda([this]() -> FText
+					{
+						return MetaSelector->SelectedValue.IsValid()
+							? FText::FromString(*MetaSelector->SelectedValue)
+							: FText::GetEmpty();
+					})
+					.OnTextCommitted_Lambda([this](const FText& NewText, ETextCommit::Type CommitType)
+					{
+						if (!NewText.IsEmpty())
+						{
+							TSharedPtr<FString> NewValue = MakeShared<FString>(*NewText.ToString());
+							MetaSelector->SelectorValues.Add(NewValue);
+							if (ValueComboBox.IsValid())
+							{
+								ValueComboBox->SetSelectedItem(NewValue);
+								ValueComboBox->RefreshOptions();
+							}
+
+						}
+					})
+			];
+			return ValueComboBox.ToSharedRef();
 		}
 
 		if (ColumnName == "Action")
@@ -45,13 +250,19 @@ TSharedRef<SWidget> SInspectorMetaRow::GenerateWidgetForColumn(const FName& Colu
 				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
 				.OnClicked_Lambda([this]() -> FReply
 				{
-					OnDeleteRequested.ExecuteIfBound(Item);
+					Item->Key = MetaSelector->SelectedKey
+						? *MetaSelector->SelectedKey
+						: FName("UndeinedKey");
+					Item->Value = MetaSelector->SelectedValue
+						? *MetaSelector->SelectedValue
+						: FString();
+					OnAddRequested.ExecuteIfBound(Item);
 					return FReply::Handled();
 				})
 				.Content()
 				[
 					SNew(SImage)
-					.Image(FAppStyle::GetBrush("Icons.Delete"))
+					.Image(FAppStyle::GetBrush("Icons.Plus"))
 				];
 		}
 	}
@@ -100,9 +311,9 @@ void SInspectorMetadataBlock::Construct(const FArguments& InArgs)
 		.HeaderRow
 		(
 			SNew(SHeaderRow)
-			+ SHeaderRow::Column("Key").DefaultLabel(FText::FromString("Key"))
-			+ SHeaderRow::Column("Value").DefaultLabel(FText::FromString("Value"))
-			+ SHeaderRow::Column("Action").DefaultLabel(FText::FromString("Action"))
+			+ SHeaderRow::Column("Key").DefaultLabel(FText::FromString("Key")).FillWidth(0.4f)
+			+ SHeaderRow::Column("Value").DefaultLabel(FText::FromString("Value")).FillWidth(0.4f)
+			+ SHeaderRow::Column("Action").DefaultLabel(FText::FromString("Action")).FillWidth(0.2f)
 		)
 	];
 }
@@ -119,7 +330,7 @@ void SInspectorMetadataBlock::UpdateLayout()
 
 	if (TargetObject.IsValid( ))
 	{
-		auto PackageMetaData = GetMetaData(TargetObject->GetPackage());
+		auto PackageMetaData = InspectorMetaDataHelper::GetMetaData(TargetObject->GetPackage());
 		auto ObjectMetaData = PackageMetaData.Find(TargetObject.Get());
 		if (ObjectMetaData)
 		{
@@ -133,171 +344,27 @@ void SInspectorMetadataBlock::UpdateLayout()
 	MetaRows.Add(MakeShared<FMetaRow>(FMetaRow{FName(), FString()}));
 	TableView->RebuildList();
 }
-/*
-TSharedRef<ITableRow> SInspectorMetadataBlock::OnGenerateRow(TSharedPtr<FMetaRow> Item, const TSharedRef<STableViewBase>& OwnerTable)
-{
-	if (Item == MetaRows.Last())
-	{
-		const bool bLastRowIsEmpty = Item->Key.IsNone( ) && Item->Value.IsEmpty( );
-		ensure(bLastRowIsEmpty); 
-		return SNew(STableRow<TSharedPtr<FMetaRow>>, OwnerTable)
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SComboBox<TSharedPtr<FString>>)
-				.OptionsSource(&AvailableKeys)
-				.OnSelectionChanged_Lambda([this](TSharedPtr<FString> NewSelected, ESelectInfo::Type)
-				{
-					SelectedKey = NewSelected;
-				})
-				[
-					SNew(STextBlock)
-					.Text_Lambda([this]() -> FText
-					{
-						return SelectedKey.IsValid() ? FText::FromString(*SelectedKey) : FText::GetEmpty();
-					})
-				]
-			]
-			
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SEditableTextBox)
-				.Text(FText::FromString("DefaultValue"))
-			]
-			
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SButton)
-				.OnClicked_Lambda([this]() { OnAddMetaRow("Key", "Value"); return FReply::Handled(); })
-				.Content()
-				[
-					SNew(SImage).Image(FAppStyle::GetBrush("Icons.Plus"))
-				]
-			]
-		];
-	}
-	
-	return SNew(STableRow<TSharedPtr<FMetaRow>>, OwnerTable)
-	[
-		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth()
-		[
-			SNew(SEditableTextBox)
-			.Text(FText::FromName(Item->Key))
-			.OnTextCommitted_Lambda([Item](const FText& NewText, ETextCommit::Type)
-			{
-				Item->Key = FName(NewText.ToString());
-			})
-		]
-		+ SHorizontalBox::Slot().AutoWidth()
-		[
-			SNew(SEditableTextBox)
-			.Text(FText::FromString(Item->Value))
-			.OnTextCommitted_Lambda([Item](const FText& NewText, ETextCommit::Type)
-			{
-				Item->Value = NewText.ToString();
-			})
-		]
-		+ SHorizontalBox::Slot().AutoWidth()
-		[
-			SNew(SButton)
-			.ButtonStyle(FAppStyle::Get(), "NoBorder")
-			.ContentPadding(0)
-			.OnClicked_Lambda([this, Item]() -> FReply
-			{
-				OnDeleteMetaRow(Item);
-				return FReply::Handled();
-			})
-			.Content()
-			[
-				SNew(SImage)
-				.Image(FAppStyle::GetBrush("Icons.Delete"))
-			]
-		]
-	];
-}*/
 
 TSharedRef<ITableRow> SInspectorMetadataBlock::OnGenerateRow(TSharedPtr<FMetaRow> Item, const TSharedRef<STableViewBase>& OwnerTable)
 {
     const bool bIsLast = (Item == MetaRows.Last());
-	const bool bIsEmpty = Item->Key.IsNone( ) && Item->Value.IsEmpty( );
+	const bool bIsEmpty = Item->Key.IsNone( );
 	ensureMsgf((!bIsLast || bIsEmpty), TEXT("Last row must be empty, but it is not!"));
 
 	auto Row = SNew(SInspectorMetaRow, OwnerTable).Item(Item);
 	Row->OnDeleteRequested.BindSP(SharedThis(this), &SInspectorMetadataBlock::OnDeleteMetaRow);
+	Row->OnAddRequested.BindSP(SharedThis(this), &SInspectorMetadataBlock::OnAddMetaRow);
 	return Row;
 }
 
 void SInspectorMetadataBlock::OnDeleteMetaRow(TSharedPtr<FMetaRow> Row)
 {
-	RemoveMetaData(TargetObject.Get(), Row->Key);
+	InspectorMetaDataHelper::RemoveMetaData(TargetObject.Get(), Row->Key);
 	UpdateLayout();
 }
 
-void SInspectorMetadataBlock::OnAddMetaRow(FName Key, FString Value)
+void SInspectorMetadataBlock::OnAddMetaRow(TSharedPtr<FMetaRow> Row)
 {
-	SetMetaData(TargetObject.Get(), Key, Value);
+	InspectorMetaDataHelper::SetMetaData(TargetObject.Get(), Row->Key, Row->Value);
 	UpdateLayout();
-}
-
-TMap<UObject*, FInspectorObjectMetaData> SInspectorMetadataBlock::GetMetaData(const UPackage* Package)
-{
-	TMap<UObject *, FInspectorObjectMetaData> Result;
-
-	bool bHasMetaData = Package->HasMetaData();
-
-
-	if (!Package || !bHasMetaData)
-		return Result;
-
-	auto ConstPackage = const_cast<UPackage*>(Package);
-	if (!ConstPackage)
-		return Result;
-
-	for (const auto & Entry : ConstPackage->GetMetaData()->ObjectMetaDataMap)
-	{
-		if (Entry.Key.IsValid( ))
-		{
-			Result.Add(Entry.Key.Get( ), FInspectorObjectMetaData{ Entry.Value });
-		}
-	}
-
-	return Result;
-}
-
-TArray<FInspectorObjectMetaData> SInspectorMetadataBlock::GetMetaDataForUnreachableObjects(const UPackage* Package)
-{
-	TArray<FInspectorObjectMetaData> Result;
-
-	if (!Package)
-		return Result;
-
-	auto ConstPackage = const_cast<UPackage*>(Package);
-	if (!ConstPackage)
-		return Result;
-
-	for (const auto & Entry : ConstPackage->GetMetaData()->ObjectMetaDataMap)
-	{
-		if (!Entry.Key.IsValid( ))
-		{
-			Result.Emplace(FInspectorObjectMetaData{ Entry.Value });
-		}
-	}
-
-	return Result;
-}
-
-void SInspectorMetadataBlock::SetMetaData(const UObject* Object, const FName Key, const FString Value)
-{
-	if (!Object || Key.IsNone( )) return;
-
-	Object->GetPackage( )->GetMetaData( )->SetValue(Object, Key, *Value);
-}
-
-void SInspectorMetadataBlock::RemoveMetaData(const UObject* Object, const FName Key)
-{
-	if (!Object || Key.IsNone( )) return;
-
-	Object->GetPackage( )->GetMetaData( )->RemoveValue(Object, Key);
 }
