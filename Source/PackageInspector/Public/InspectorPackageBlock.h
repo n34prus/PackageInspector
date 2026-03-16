@@ -16,7 +16,7 @@ struct FPackageTreeNode
 	bool bHighlighted = false;
 	bool bHasPathMatch = false;  
 	bool bHasNameMatch = false;
-	bool bHasLeafMatch = false;    // есть совпавший лист в subtree
+	bool bHasLeafMatch = false;
 
 	bool IsFolder() const { return !Package.IsValid(); }
 };

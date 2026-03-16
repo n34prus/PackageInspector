@@ -4,6 +4,7 @@
 #include "InspectorDetailsBlock.h"
 #include "InspectorPackageBlock.h"
 #include "InspectorMetadataBlock.h"
+#include "InspectorDirtyBlock.h"
 
 #include "ContentBrowserModule.h"
 #include "Widgets/Colors/SColorBlock.h"
@@ -182,36 +183,39 @@ void SInspectorGeneralWindow::RebuildLayout()
 					SAssignNew(MetadataBlock, SInspectorMetadataBlock)
 				]
 			]
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			[
+				SNew(SBox)
+				.HeightOverride(50.f)
+				.VAlign(VAlign_Center)
+				[
+					SAssignNew(DirtyBlock, SInspectorDirtyStatusBlock)
+				]
+			]
+			
 		]
 	];
 
 	SettingsBlock->OnSettingsChanged.BindLambda(
 [this](bool bAll, bool bTransient, bool bEdit)
 		{
-			//TreeBlock->SetMode(bAll, bTransient);
-			DetailsBlock->SetEditingEnabled(bEdit);
+			if (DetailsBlock) DetailsBlock->SetEditingEnabled(bEdit);
 		});
 
 	ObjectBlock->OnObjectSelected.BindLambda(
 [this](UObject* Obj)
 		{
-			if (DetailsBlock)
-			{
-				DetailsBlock->SetObject(Obj);
-			}
-			if (MetadataBlock)
-			{
-				MetadataBlock->SetTargetObject(Obj);
-			}
+			if (DetailsBlock) DetailsBlock->BindObject(Obj);
+			if (MetadataBlock) MetadataBlock->BindObject(Obj);
+			if (DirtyBlock) DirtyBlock->BindObject(Obj);
 		});
 
 	PackageBlock->OnMultipleObjectsSelected.BindLambda(
 [this](const TArray<UObject*>& ObjArr)
 		{
-			if (ObjectBlock)
-			{
-				ObjectBlock->SetRootObjects(ObjArr);
-			}
+			if (ObjectBlock) ObjectBlock->SetRootObjects(ObjArr);
 		});
 
 	TabSwitcher->SetActiveWidgetIndex(1);
@@ -225,9 +229,12 @@ EActiveTimerReturnType SInspectorGeneralWindow::OnTick(double InCurrentTime, flo
 
 void SInspectorGeneralWindow::UpdateLayout()
 {
-	// if (PackageBlock) PackageBlock->UpdateLayout(); better to stay on manual update
+	// broadcast update to any external logic out of basic childs
+	OnUpdateLayout.Broadcast();
+	// if (PackageBlock) PackageBlock->UpdateLayout(); // better to stay on manual update
 	if (ObjectBlock) ObjectBlock->UpdateLayout();
 	if (DetailsBlock) DetailsBlock->UpdateLayout();
+	if (DirtyBlock) DirtyBlock->UpdateLayout();
 }
 
 void SInspectorGeneralWindow::BindToContentBrowser()
@@ -243,10 +250,10 @@ void SInspectorGeneralWindow::BindToContentBrowser()
 
 void SInspectorGeneralWindow::UnbindFromContentBrowser()
 {
-	FContentBrowserModule& CBModule =
-	FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
-
-	CBModule.GetOnAssetSelectionChanged().Remove(ContentBrowserHandle);
+	auto CBModule =
+	FModuleManager::GetModulePtr<FContentBrowserModule>("ContentBrowser");
+	if (!CBModule) return;
+	CBModule->GetOnAssetSelectionChanged().Remove(ContentBrowserHandle);
 }
 
 void SInspectorGeneralWindow::OnAssetSelectionChanged(
@@ -258,8 +265,8 @@ void SInspectorGeneralWindow::OnAssetSelectionChanged(
 	TArray<UObject*> RootObjects;
 	
 	for (auto AssetData : SelectedAssets)
-	{
-		UObject* Asset = AssetData.GetAsset();	// immediate loading
+		{
+		UObject* Asset = AssetData.GetAsset(); // immediate loading
 		if (!Asset) continue;
 		UPackage* Package = Asset->GetPackage();
 		if (!Package) continue;

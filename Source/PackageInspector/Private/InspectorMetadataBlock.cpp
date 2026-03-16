@@ -1,7 +1,6 @@
 ﻿#include "InspectorMetadataBlock.h"
-#include "Widgets/Input/SEditableComboBox.h"
 
-TArray<FName> InspectorMetaDataHelper::GetAvalibleMetaKeys()
+TArray<FName> FInspectorMetaDataHelper::GetAvaliableMetaKeys()
 {
 	TArray<FName> Result;
 	if (ExistedCollection.IsEmpty())
@@ -23,7 +22,7 @@ TArray<FName> InspectorMetaDataHelper::GetAvalibleMetaKeys()
 	return Result;
 }
 
-TArray<FString> InspectorMetaDataHelper::GetAvalibleMetaValues(const FName& Key)
+TArray<FString> FInspectorMetaDataHelper::GetAvaliableMetaValues(const FName& Key)
 {
 	TArray<FString> Result;
 	if (ExistedCollection.Contains(Key))
@@ -34,8 +33,9 @@ TArray<FString> InspectorMetaDataHelper::GetAvalibleMetaValues(const FName& Key)
 	return Result;
 }
 
-void InspectorMetaDataHelper::RefreshMetaDataCollection()
+void FInspectorMetaDataHelper::RefreshMetaDataCollection()
 {
+	ExistedCollection.Reset();
 	for (TObjectIterator<UPackage> It; It; ++It)
 	{
 		UPackage* Package = *It;
@@ -50,15 +50,13 @@ void InspectorMetaDataHelper::RefreshMetaDataCollection()
 	}
 }
 
-TMap<UObject*, FInspectorObjectMetaData> InspectorMetaDataHelper::GetMetaData(const UPackage* Package)
+TMap<UObject*, FInspectorObjectMetaData> FInspectorMetaDataHelper::GetMetaData(const UPackage* Package)
 {
 	TMap<UObject *, FInspectorObjectMetaData> Result;
 
+	if (!Package) return Result;
 	bool bHasMetaData = Package->HasMetaData();
-
-
-	if (!Package || !bHasMetaData)
-		return Result;
+	if (!bHasMetaData) return Result;
 
 	auto ConstPackage = const_cast<UPackage*>(Package);
 	if (!ConstPackage)
@@ -75,7 +73,7 @@ TMap<UObject*, FInspectorObjectMetaData> InspectorMetaDataHelper::GetMetaData(co
 	return Result;
 }
 
-TArray<FInspectorObjectMetaData> InspectorMetaDataHelper::GetMetaDataForUnreachableObjects(const UPackage* Package)
+TArray<FInspectorObjectMetaData> FInspectorMetaDataHelper::GetMetaDataForUnreachableObjects(const UPackage* Package)
 {
 	TArray<FInspectorObjectMetaData> Result;
 
@@ -97,14 +95,14 @@ TArray<FInspectorObjectMetaData> InspectorMetaDataHelper::GetMetaDataForUnreacha
 	return Result;
 }
 
-void InspectorMetaDataHelper::SetMetaData(const UObject* Object, const FName Key, const FString Value)
+void FInspectorMetaDataHelper::SetMetaData(const UObject* Object, const FName Key, const FString Value)
 {
 	if (!Object || Key.IsNone( )) return;
 	LastUsedKeys.Add(Key);
 	Object->GetPackage( )->GetMetaData( )->SetValue(Object, Key, *Value);
 }
 
-void InspectorMetaDataHelper::RemoveMetaData(const UObject* Object, const FName Key)
+void FInspectorMetaDataHelper::RemoveMetaData(const UObject* Object, const FName Key)
 {
 	if (!Object || Key.IsNone( )) return;
 
@@ -113,8 +111,8 @@ void InspectorMetaDataHelper::RemoveMetaData(const UObject* Object, const FName 
 
 FInspectorMetaSelector::FInspectorMetaSelector()
 {
-	InspectorMetaDataHelper::RefreshMetaDataCollection();
-	for (const auto& Key : InspectorMetaDataHelper::GetAvalibleMetaKeys())
+	FInspectorMetaDataHelper::RefreshMetaDataCollection();
+	for (const auto& Key : FInspectorMetaDataHelper::GetAvaliableMetaKeys())
 	{
 		SelectorKeys.Add(MakeShared<FName>(Key));
 	}	
@@ -126,7 +124,7 @@ void FInspectorMetaSelector::SetKeyAndGenerateValues(TSharedPtr<FName> NewValue)
 	SelectorValues.Empty();
 	if (SelectedKey.IsValid())
 	{
-		for (const auto& Value : InspectorMetaDataHelper::GetAvalibleMetaValues(*SelectedKey))
+		for (const auto& Value : FInspectorMetaDataHelper::GetAvaliableMetaValues(*SelectedKey))
 		{
 			SelectorValues.Add(MakeShared<FString>(Value));
 		}
@@ -252,7 +250,7 @@ TSharedRef<SWidget> SInspectorMetaRow::GenerateWidgetForColumn(const FName& Colu
 				{
 					Item->Key = MetaSelector->SelectedKey
 						? *MetaSelector->SelectedKey
-						: FName("UndeinedKey");
+						: FName("UndefinedKey");
 					Item->Value = MetaSelector->SelectedValue
 						? *MetaSelector->SelectedValue
 						: FString();
@@ -318,7 +316,7 @@ void SInspectorMetadataBlock::Construct(const FArguments& InArgs)
 	];
 }
 
-void SInspectorMetadataBlock::SetTargetObject(UObject* Object)
+void SInspectorMetadataBlock::BindObject(UObject* Object)
 {
 	TargetObject = Object;
 	UpdateLayout();
@@ -330,7 +328,7 @@ void SInspectorMetadataBlock::UpdateLayout()
 
 	if (TargetObject.IsValid( ))
 	{
-		auto PackageMetaData = InspectorMetaDataHelper::GetMetaData(TargetObject->GetPackage());
+		auto PackageMetaData = FInspectorMetaDataHelper::GetMetaData(TargetObject->GetPackage());
 		auto ObjectMetaData = PackageMetaData.Find(TargetObject.Get());
 		if (ObjectMetaData)
 		{
@@ -359,12 +357,12 @@ TSharedRef<ITableRow> SInspectorMetadataBlock::OnGenerateRow(TSharedPtr<FMetaRow
 
 void SInspectorMetadataBlock::OnDeleteMetaRow(TSharedPtr<FMetaRow> Row)
 {
-	InspectorMetaDataHelper::RemoveMetaData(TargetObject.Get(), Row->Key);
+	FInspectorMetaDataHelper::RemoveMetaData(TargetObject.Get(), Row->Key);
 	UpdateLayout();
 }
 
 void SInspectorMetadataBlock::OnAddMetaRow(TSharedPtr<FMetaRow> Row)
 {
-	InspectorMetaDataHelper::SetMetaData(TargetObject.Get(), Row->Key, Row->Value);
+	FInspectorMetaDataHelper::SetMetaData(TargetObject.Get(), Row->Key, Row->Value);
 	UpdateLayout();
 }

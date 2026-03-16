@@ -64,7 +64,7 @@ private:
 	TSharedRef<ITableRow> OnGenerateRow(FInspectObjectPtr Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void OnGetChildren(FInspectObjectPtr Item, TArray<FInspectObjectPtr>& OutChildren);
 	void OnSelectionChanged(FInspectObjectPtr Item, ESelectInfo::Type SelectInfo);
-	auto OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded) -> void;
+	void OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded);
 	void UpdateHint();
 	
 	// context menu //

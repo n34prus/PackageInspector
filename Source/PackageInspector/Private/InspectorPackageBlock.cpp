@@ -52,7 +52,6 @@ TSharedRef<SWidget> SInspectorPackageRow::GenerateWidgetForColumn(const FName& C
             uint32 Flags = Item->Package->GetPackageFlags();
 
             FString Out;
-            //if (Flags & RF_Transient)          Out += "TR "; object flag, not package
             if (Flags & PKG_PlayInEditor)      Out += "PIE ";
             if (Flags & PKG_CompiledIn)         Out += "CI ";
             if (Flags & PKG_EditorOnly)         Out += "EO ";

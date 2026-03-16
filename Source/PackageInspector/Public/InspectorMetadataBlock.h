@@ -17,11 +17,11 @@ DECLARE_DELEGATE_OneParam(
 	TSharedPtr<FMetaRow>
 );
 
-class InspectorMetaDataHelper
+class FInspectorMetaDataHelper
 {
 public:
-	static TArray<FName> GetAvalibleMetaKeys();
-	static TArray<FString> GetAvalibleMetaValues(const FName& Key);
+	static TArray<FName> GetAvaliableMetaKeys();
+	static TArray<FString> GetAvaliableMetaValues(const FName& Key);
 	static void RefreshMetaDataCollection();
 	
 	static TMap<UObject*, FInspectorObjectMetaData> GetMetaData(const UPackage * Package);
@@ -69,15 +69,13 @@ public:
 
 	void Construct(const FArguments& InArgs);
 
-	void SetTargetObject(UObject* Object);
+	void BindObject(UObject* Object);
 	void UpdateLayout();
 
 private:	
 	TArray<TSharedPtr<FMetaRow>> MetaRows;
 	TWeakObjectPtr<UObject> TargetObject;
 	TSharedPtr<SListView<TSharedPtr<FMetaRow>>> TableView;
-	TArray<TSharedPtr<FString>> AvailableKeys {MakeShared<FString>("KeyA"), MakeShared<FString>("KeyB")};
-	TSharedPtr<FString> SelectedKey;
 
 	TSharedRef<ITableRow> OnGenerateRow(TSharedPtr<FMetaRow> Item, const TSharedRef<STableViewBase>& OwnerTable);
 

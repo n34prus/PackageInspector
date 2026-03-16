@@ -26,29 +26,35 @@ void FPackageInspectorModule::StartupModule()
 	FSimpleMulticastDelegate::FDelegate::CreateLambda([]()
 	{
 		UToolMenu* Menu =
-			UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.Window");
+			UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.Tools");
 
-		FToolMenuSection& Section =
-			Menu->AddSection("PackageInspector");
+		FToolMenuSection& Section =	Menu->FindOrAddSection(
+			"Plugins",
+			FText::FromString("Plugins"),
+			FToolMenuInsert("Tools", EToolMenuInsertType::After));
 
 		Section.AddMenuEntry(
-			"OpenAssetInspector",
+			"PackageInspector",
 			FText::FromString("Package Inspector"),
 			FText::FromString("Open Package Inspector"),
-			FSlateIcon(),
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Tool"),	// doesn't work
 			FUIAction(FExecuteAction::CreateLambda([]()
 			{
 				FGlobalTabmanager::Get()->TryInvokeTab(
 					FName("PackageInspector"));
 			}))
 		);
-	})
-);
+	}));
 }
 
 void FPackageInspectorModule::ShutdownModule()
 {
 	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PackageInspectorTabName);
+}
+
+FPackageInspectorModule& FPackageInspectorModule::Get()
+{
+	return FModuleManager::LoadModuleChecked<FPackageInspectorModule>("FPackageInspectorModule");
 }
 
 TSharedRef<SDockTab> FPackageInspectorModule::OnSpawnPluginTab(
@@ -57,7 +63,7 @@ TSharedRef<SDockTab> FPackageInspectorModule::OnSpawnPluginTab(
 	return SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab)
 		[
-			SNew(SInspectorGeneralWindow)
+			SAssignNew(GeneralWindow, SInspectorGeneralWindow)
 		];
 }
 

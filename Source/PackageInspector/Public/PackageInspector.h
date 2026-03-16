@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "InspectorGeneralWindow.h"
 #include "Modules/ModuleManager.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPackageInspector, Log, All);
@@ -23,7 +24,10 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+	TSharedPtr<SInspectorGeneralWindow> GetWindow() const { return GeneralWindow; }
+	inline static FPackageInspectorModule& Get();
 
 private:
 	TSharedRef<SDockTab> OnSpawnPluginTab(const FSpawnTabArgs& SpawnTabArgs);
+	TSharedPtr<SInspectorGeneralWindow> GeneralWindow;
 };

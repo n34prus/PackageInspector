@@ -1,8 +1,6 @@
 ﻿#include "InspectorObjectBlock.h"
-#include "AssetRegistry/AssetData.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/STableRow.h"
-#include "UObject/UObjectIterator.h"
 #include "HAL/PlatformApplicationMisc.h"
 
 #include "Kismet2/SClassPickerDialog.h"
@@ -113,7 +111,7 @@ void SInspectorObjectBlock::Construct(const FArguments& InArgs)
 			)
 		]
 	];
-
+	
 	UpdateLayout();
 }
 
@@ -152,11 +150,10 @@ void SInspectorObjectBlock::UpdateLayout()
 	
 	TSet<FInspectObjectPtr> Expanded;
 	TreeView->GetExpandedItems(Expanded);
-	for (FInspectObjectPtr Node : Expanded)
+	for (const FInspectObjectPtr& Node : Expanded)
 	{
 		if (!Node.IsValid())
 			continue;
-		auto Obj = Node.Get();
 		ExtractPackageObjects(Node, 1);
 	}
 
@@ -275,22 +272,32 @@ void SInspectorObjectBlock::CmOnRenameCommitted(const FText& Text, ETextCommit::
 
 void SInspectorObjectBlock::RenameSelectedObject()
 {
-	if (!TreeView || TreeView->GetNumItemsSelected() != 1) return;
-	UObject* Selected = TreeView->GetSelectedItems()[0].Get();
-	if (!Selected) return;
+	UObject* SeletedObject = nullptr;
+	if (TreeView)
+	{
+		if (TreeView->GetNumItemsSelected() != 1) return;
+		if (const auto& Selected = TreeView->GetSelectedItems(); !Selected.IsEmpty())
+		{
+			SeletedObject = TreeView->GetSelectedItems()[0].Get();
+		}
+	}
+	if (!SeletedObject) return;
 	
 	TSharedRef<STextEntryPopup> TextEntry =
 		SNew(STextEntryPopup)
 		.Label(FText::FromString("New Name"))
-		.DefaultText(FText::FromName(Selected->GetFName()))
-		.OnTextCommitted(FOnTextCommitted::CreateSP(this, &SInspectorObjectBlock::CmOnRenameCommitted, Selected));
+		.DefaultText(FText::FromName(SeletedObject->GetFName()))
+		.OnTextCommitted(FOnTextCommitted::CreateSP(
+			this,
+			&SInspectorObjectBlock::CmOnRenameCommitted,
+			SeletedObject));
 
 	FSlateApplication::Get().PushMenu(
-		SharedThis(this),
-		FWidgetPath(),
-		TextEntry,
-		FSlateApplication::Get().GetCursorPos(),
-		FPopupTransitionEffect(FPopupTransitionEffect::TypeInPopup)
+			SharedThis(this),
+			FWidgetPath(),
+			TextEntry,
+			FSlateApplication::Get().GetCursorPos(),
+			FPopupTransitionEffect(FPopupTransitionEffect::TypeInPopup)
 	);
 }
 
@@ -298,7 +305,7 @@ void SInspectorObjectBlock::CmOnRemoveFromPackage()
 {
 	auto Selected = TreeView->GetSelectedItems();
 
-	for (auto& Item : Selected)
+	for (const FInspectObjectPtr& Item : Selected)
 	{
 		if (!Item.IsValid() || !Item.Get()) 
 			continue;
@@ -314,7 +321,7 @@ void SInspectorObjectBlock::CmOnDestroyObject()
 {
 	auto Selected = TreeView->GetSelectedItems();
 
-	for (auto& Item : Selected)
+	for (const FInspectObjectPtr& Item : Selected)
 	{
 		if (!Item.IsValid() || !Item.Get()) 
 			continue;
@@ -396,7 +403,7 @@ void SInspectorObjectBlock::CmCopyPathToClipboard()
 {
 	FString Result;
 	
-	for (FInspectObjectPtr Item : TreeView->GetSelectedItems())
+	for (const FInspectObjectPtr& Item : TreeView->GetSelectedItems())
 	{
 		UObject* Obj = Item.Get();
 		if (Obj)
@@ -413,7 +420,7 @@ void SInspectorObjectBlock::CmCopyAddressToClipboard()
 {
 	FString Result;
 	
-	for (FInspectObjectPtr Item : TreeView->GetSelectedItems())
+	for (const FInspectObjectPtr& Item : TreeView->GetSelectedItems())
 	{
 		UObject* Obj = Item.Get();
 		if (Obj)
@@ -422,6 +429,8 @@ void SInspectorObjectBlock::CmCopyAddressToClipboard()
 			Result += "\n";
 		}
 	}
+
+	FPlatformApplicationMisc::ClipboardCopy(*Result);
 }
 
 void SInspectorObjectBlock::CmCreateSubObject()
@@ -478,15 +487,18 @@ void SInspectorObjectBlock::OnNewSubObjectNameCommitted(const FText& Text, EText
 
 	FString NameString = Text.ToString();
 
-	UObject* Outer = nullptr;
+	UObject* SeletedObject = nullptr;
 	if (TreeView)
 	{
-		Outer = TreeView->GetSelectedItems()[0].Get();
+		if (const auto& Selected = TreeView->GetSelectedItems(); !Selected.IsEmpty())
+		{
+			SeletedObject = TreeView->GetSelectedItems()[0].Get();
+		}
 	}
-	if (!Outer) return;
+	if (!SeletedObject) return;
 	
 	UObject* NewObj = NewObject<UObject>(
-		Outer,
+		SeletedObject,
 		Class,
 		*NameString,
 		RF_Transient
@@ -499,17 +511,15 @@ void SInspectorObjectBlock::OnNewSubObjectNameCommitted(const FText& Text, EText
 	
 	FSlateApplication::Get().DismissAllMenus();
 	UpdateLayout();
-	TreeView->SetItemExpansion(Outer, true);
+	TreeView->SetItemExpansion(SeletedObject, true);
 	TreeView->SetSelection(NewObj);
 	UpdateLayout();
 }
 
-auto SInspectorObjectBlock::OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded) -> void
+void SInspectorObjectBlock::OnItemExpansionChanged(FInspectObjectPtr Item, bool bExpanded)
 {
-	if (bExpanded)
-	{
-		UpdateLayout();
-	}
+	if (!bExpanded) return;
+	UpdateLayout();
 }
 
 void SInspectorObjectBlock::UpdateHint()
@@ -524,7 +534,7 @@ void SInspectorObjectBlock::UpdateHint()
 		if (const auto Package = Object->GetPackage())
 		{
 			FString Out;
-			uint32 Flags;
+			uint32 Flags = 0;
 			auto AddFlag = [&](uint32 Flag, const TCHAR* Name)
 			{
 				if (Flags & Flag)
