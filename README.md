@@ -1,2 +1,10 @@
 # PackageInspector
-Unreal Engine plugin for inspecting and editing asset or package properties
+
+Unreal Engine plugin for inspecting and editing asset or package properties.
+
+- explore loaded packages and assets
+- analyze object hierarchy niside the package
+- modify object properties and metadata
+  
+Read more on:
+https://packageinspector.nicepage.io/
